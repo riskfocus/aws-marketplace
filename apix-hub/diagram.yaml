@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS Quickstart APIX HUB server
+Parameters:
+  ADServerAddress:
+    Type: String
+    Default: samba-dc
+  ADUseSSL:
+    Type: String
+    Default: 'False'
+  ADUseSTARTTLS:
+    Type: String
+    Default: 'False'
+  ADSearchRoot:
+    Type: String
+    Default: 'cn=Users,dc=test,dc=com'
+  InstanceType:
+    Type: String
+    Default: t2.medium
+  KeyName:
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Default: AWS_Marketplace
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.192.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 1e98bb75-c4a2-4580-b278-55cf6399fac6
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 8bcc05b4-df42-4f34-afb0-97487a110dbb
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 01874eb1-88f9-42f7-9162-3bf91ff8217c
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      CidrBlock: 10.192.10.0/24
+      MapPublicIpOnLaunch: true
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 366e5c1a-83f5-422d-936e-b9e82dad1196
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs ''
+      CidrBlock: 10.192.11.0/24
+      MapPublicIpOnLaunch: true
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: c3b195e6-8fc2-4ddb-803f-853769e1e23d
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      CidrBlock: 10.192.20.0/24
+      MapPublicIpOnLaunch: false
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 00e066a8-2625-411c-b77d-671974abb6f5
+  NatGateway1:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ac318dea-f64b-4c74-9e7b-c563aceb93b0
+  SSMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM'
+      Path: /
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 6848bf1e-c0ad-4788-a617-1ccb716b9069
+  SSMInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: SSMRole
+      Path: /
+      Roles:
+        - !Ref SSMRole
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ab04c9d9-11b0-4afd-a9c7-6644c9e78faa
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: ami-00951cb8af4883f0a
+      SubnetId: !Ref PrivateSubnet1
+      SecurityGroupIds:
+        - !Ref SecurityGroup2
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      Tags:
+        - Key: Name
+          Value: APIX-HUB
+      UserData:
+        'Fn::Base64': !Sub >
+          #!/bin/bash -xe
+
+          echo AD_SERVER_ADDRESS=${ADServerAddress} >>
+          /home/ubuntu/apix-backend/.env
+
+          echo AD_USE_SSL=${ADUseSSL} >> /home/ubuntu/apix-backend/.env
+
+          echo AD_USE_STARTTLS=${ADUseSTARTTLS} >>
+          /home/ubuntu/apix-backend/.env
+
+          echo AD_SEARCH_ROOT=${ADSearchRoot} >> /home/ubuntu/apix-backend/.env
+
+          cd /home/ubuntu/apix-backend
+
+          docker-compose up --no-start
+
+          docker-compose start
+
+          cd /home/ubuntu/apix-ui
+
+          docker-compose up --no-start
+
+          docker-compose start
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 1f706b70-9fa1-4898-a3e4-bf4f8115481f
+    DependsOn:
+      - LoadBalancer
+  LoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref SecurityGroup
+        - !Ref SecurityGroup2
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: InterfaceLoadBalancer
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0985a0b8-c9f4-4a09-b50c-0ec636d6dd2b
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt LoadBalancer.DNSName
+            Id: !Ref LoadBalancer
+            CustomOriginConfig:
+              HTTPPort: '80'
+              OriginProtocolPolicy: http-only
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - DELETE
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          TargetOriginId: !Ref LoadBalancer
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: all
+          ViewerProtocolPolicy: redirect-to-https
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: a8248aee-fb5a-42ea-a2e6-cf8d297dec7e
+Outputs:
+  APIXHubHost:
+    Description: Endpoint for Cloudfront Distribution
+    Value: !GetAtt CloudFrontDistribution.DomainName
+Metadata:
+  'AWS::CloudFormation::Designer':
+    6848bf1e-c0ad-4788-a617-1ccb716b9069:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 840
+        'y': 340
+      z: 1
+      embeds: []
+    ab04c9d9-11b0-4afd-a9c7-6644c9e78faa:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 840
+        'y': 210
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 6848bf1e-c0ad-4788-a617-1ccb716b9069
+    8bcc05b4-df42-4f34-afb0-97487a110dbb:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 120
+        'y': 230
+      z: 1
+      embeds: []
+    1e98bb75-c4a2-4580-b278-55cf6399fac6:
+      size:
+        width: 580
+        height: 620
+      position:
+        x: 220
+        'y': 90
+      z: 1
+      embeds:
+        - 00e066a8-2625-411c-b77d-671974abb6f5
+        - c3b195e6-8fc2-4ddb-803f-853769e1e23d
+        - 366e5c1a-83f5-422d-936e-b9e82dad1196
+        - 0985a0b8-c9f4-4a09-b50c-0ec636d6dd2b
+    00e066a8-2625-411c-b77d-671974abb6f5:
+      size:
+        width: 240
+        height: 240
+      position:
+        x: 530
+        'y': 150
+      z: 2
+      parent: 1e98bb75-c4a2-4580-b278-55cf6399fac6
+      embeds:
+        - 1f706b70-9fa1-4898-a3e4-bf4f8115481f
+      iscontainedinside:
+        - 1e98bb75-c4a2-4580-b278-55cf6399fac6
+        - 1e98bb75-c4a2-4580-b278-55cf6399fac6
+    1f706b70-9fa1-4898-a3e4-bf4f8115481f:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 560
+        'y': 210
+      z: 3
+      parent: 00e066a8-2625-411c-b77d-671974abb6f5
+      embeds: []
+      isassociatedwith:
+        - 1ef63960-efe0-44c4-b2ae-73ce946e52fe
+      iscontainedinside:
+        - 00e066a8-2625-411c-b77d-671974abb6f5
+        - 00e066a8-2625-411c-b77d-671974abb6f5
+      dependson:
+        - 0985a0b8-c9f4-4a09-b50c-0ec636d6dd2b
+    c3b195e6-8fc2-4ddb-803f-853769e1e23d:
+      size:
+        width: 240
+        height: 250
+      position:
+        x: 250
+        'y': 420
+      z: 2
+      parent: 1e98bb75-c4a2-4580-b278-55cf6399fac6
+      embeds: []
+      iscontainedinside:
+        - 1e98bb75-c4a2-4580-b278-55cf6399fac6
+        - 1e98bb75-c4a2-4580-b278-55cf6399fac6
+    366e5c1a-83f5-422d-936e-b9e82dad1196:
+      size:
+        width: 240
+        height: 240
+      position:
+        x: 250
+        'y': 150
+      z: 2
+      parent: 1e98bb75-c4a2-4580-b278-55cf6399fac6
+      embeds:
+        - ac318dea-f64b-4c74-9e7b-c563aceb93b0
+      iscontainedinside:
+        - 1e98bb75-c4a2-4580-b278-55cf6399fac6
+        - 1e98bb75-c4a2-4580-b278-55cf6399fac6
+    0985a0b8-c9f4-4a09-b50c-0ec636d6dd2b:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 340
+        'y': 380
+      z: 2
+      parent: 1e98bb75-c4a2-4580-b278-55cf6399fac6
+      embeds: []
+      isassociatedwith:
+        - ffec54ad-71eb-44c9-9959-301862036a0a
+        - 1ef63960-efe0-44c4-b2ae-73ce946e52fe
+      iscontainedinside:
+        - 366e5c1a-83f5-422d-936e-b9e82dad1196
+        - c3b195e6-8fc2-4ddb-803f-853769e1e23d
+    a8248aee-fb5a-42ea-a2e6-cf8d297dec7e:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 30
+        'y': 380
+      z: 1
+      embeds: []
+    01874eb1-88f9-42f7-9162-3bf91ff8217c:
+      source:
+        id: 1e98bb75-c4a2-4580-b278-55cf6399fac6
+      target:
+        id: 8bcc05b4-df42-4f34-afb0-97487a110dbb
+      z: 1
+    ac318dea-f64b-4c74-9e7b-c563aceb93b0:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 280
+        'y': 210
+      z: 3
+      parent: 366e5c1a-83f5-422d-936e-b9e82dad1196
+      embeds: []
+      iscontainedinside:
+        - 366e5c1a-83f5-422d-936e-b9e82dad1196
+        - 366e5c1a-83f5-422d-936e-b9e82dad1196
+    e4b684bb-460c-461a-ab62-abb3cfea2037:
+      source:
+        id: 1f706b70-9fa1-4898-a3e4-bf4f8115481f
+      target:
+        id: 0985a0b8-c9f4-4a09-b50c-0ec636d6dd2b
+      z: 4

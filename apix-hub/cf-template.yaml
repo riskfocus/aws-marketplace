@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description:              APIX Hub server
+
+Parameters:
+  ADServerAddress:
+    Type:    String
+    Default: "samba-dc"
+
+  ADUseSSL:
+    Type:    String
+    Default: "False"
+
+  ADUseSTARTTLS:
+    Type:    String
+    Default: "False"
+
+  ADSearchRoot:
+    Type:    String
+    Default: "cn=Users,dc=test,dc=com"
+
+  InstanceType:
+    Type:    String
+    Default: t2.medium
+
+  KeyName:
+    Type:    AWS::EC2::KeyPair::KeyName
+    Default: AWS_Marketplace
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:          10.192.0.0/16
+      EnableDnsSupport:   true
+      EnableDnsHostnames: true
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref             VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref          VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock:           10.192.10.0/24
+      MapPublicIpOnLaunch: true
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref          VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock:           10.192.11.0/24
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref          VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock:           10.192.20.0/24
+      MapPublicIpOnLaunch: false
+
+  NatGateway1EIP:
+    Type:      AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref        PublicSubnet1
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultPublicRoute:
+    Type:      AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref    PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref       InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref     PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref     PublicSubnet2
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref    PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref    NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref     PrivateSubnet1
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        "ingress-sg"
+      GroupDescription: "Security group with LB ingress rule"
+      VpcId: !Ref       VPC
+      SecurityGroupIngress:
+        - CidrIp:      0.0.0.0/0
+          IpProtocol:  tcp
+          ToPort:      80
+          FromPort:    80
+          Description: "LB ingress rule"
+
+  SecurityGroup2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        "intermediate-sg"
+      GroupDescription: "Security group for LB and EC2 connection"
+      VpcId: !Ref       VPC
+
+  SecurityGroup2Ingress:
+    Type: AWS::EC2::SecurityGroupIngress  # prevent security group circular references
+    Properties:
+      GroupId: !Ref               SecurityGroup2
+      IpProtocol:                 -1
+      SourceSecurityGroupId: !Ref SecurityGroup2
+
+  SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      Path: "/"
+
+  SSMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: SSMRole
+      Path:                "/"
+      Roles:
+        - !Ref SSMRole
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref       InstanceType
+      ImageId:                 "ami-00951cb8af4883f0a"
+      SubnetId: !Ref           PrivateSubnet1
+      SecurityGroupIds:
+        - !Ref SecurityGroup2
+      KeyName: !Ref            KeyName
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      Tags:
+        - Key:   Name
+          Value: 'APIX-HUB'
+      UserData:
+        Fn::Base64: !Sub |
+                         #!/bin/bash -xe
+                         echo AD_SERVER_ADDRESS=${ADServerAddress} >> /home/ubuntu/apix-backend/.env
+                         echo AD_USE_SSL=${ADUseSSL} >> /home/ubuntu/apix-backend/.env
+                         echo AD_USE_STARTTLS=${ADUseSTARTTLS} >> /home/ubuntu/apix-backend/.env
+                         echo AD_SEARCH_ROOT=${ADSearchRoot} >> /home/ubuntu/apix-backend/.env
+                         cd /home/ubuntu/apix-backend
+                         docker-compose up --no-start
+                         docker-compose start
+                         cd /home/ubuntu/apix-ui
+                         docker-compose up --no-start
+                         docker-compose start
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type:   application
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref SecurityGroup
+        - !Ref SecurityGroup2
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key:   "Name"
+          Value: InterfaceLoadBalancer
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port:                 80
+      Protocol:             HTTP
+      DefaultActions:
+        - Type:                forward
+          TargetGroupArn: !Ref LoadBalancerTargetGroupPrimary
+
+  LoadBalancerListenerRuleForUI:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type:                forward
+          TargetGroupArn: !Ref LoadBalancerTargetGroupPrimary
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - "*"
+      ListenerArn: !Ref LoadBalancerListener
+      Priority:         2
+
+  LoadBalancerListenerRuleForAPI:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type:                forward
+          TargetGroupArn: !Ref LoadBalancerTargetGroupSecondary
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - "/api/*"
+      ListenerArn: !Ref LoadBalancerListener
+      Priority:         1
+
+  LoadBalancerTargetGroupPrimary:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port:                80
+      Protocol:            HTTP
+      Targets:
+        - Id: !Ref EC2Instance
+          Port:    8000
+      TargetType:          instance
+      VpcId: !Ref          VPC
+
+      HealthCheckEnabled:  true
+      HealthCheckPort:     8000
+      HealthCheckProtocol: HTTP
+      Tags:
+        - Key:   "Name"
+          Value: LoadBalancerTargetGroupPrimary
+
+  LoadBalancerTargetGroupSecondary:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port:                8080
+      Protocol:            HTTP
+      Targets:
+        - Id: !Ref EC2Instance
+          Port:    8080
+      TargetType:          instance
+      VpcId: !Ref          VPC
+
+      HealthCheckEnabled:  true
+      HealthCheckPort:     8080
+      HealthCheckProtocol: HTTP
+      Tags:
+        - Key:   "Name"
+          Value: LoadBalancerTargetGroupSecondary
+
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt 'LoadBalancer.DNSName'
+            Id: !Ref            LoadBalancer
+            CustomOriginConfig:
+              HTTPPort:             '80'
+              OriginProtocolPolicy: "http-only"
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - DELETE
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          TargetOriginId: !Ref  LoadBalancer
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: all
+          ViewerProtocolPolicy: redirect-to-https
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  APIXHubHost:
+    Description:   Endpoint for Cloudfront Distribution
+    Value: !GetAtt CloudFrontDistribution.DomainName

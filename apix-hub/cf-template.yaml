@@ -1,30 +1,79 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description:              APIX Hub server
+Description:              APIX.Hub™ is an API document store for registering, discovering and accessing APIs, based on Open API standards (Swagger specification)
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "AD Configuration"
+        Parameters:
+          - ADServerAddress
+          - ADUseSSL
+          - ADUseSTARTTLS
+          - ADSearchRoot
+          - ADServiceAccountUserDN
+          - ADServiceAccountPassword
+      - Label:
+          default: "SuperUser Configuration"
+        Parameters:
+          - SuperUserEMAIL
+          - SuperUserFirstName
+          - SuperUserLastName
 
 Parameters:
   ADServerAddress:
-    Type:    String
-    Default: "samba-dc"
+    Type:        String
+    Description: "This setting is the address (IP, DNS Name, or URL) for the LDAP server of your organization. For example ldaps://ldap.company.com:636"
 
   ADUseSSL:
-    Type:    String
-    Default: "False"
+    Type:        String
+    AllowedValues:
+      - "True"
+      - "False"
+    Default:     "True"
+    Description: "This setting allows for enabling SSL for the ldap connection to your server's organization. Default is true."
 
   ADUseSTARTTLS:
-    Type:    String
-    Default: "False"
+    Type:        String
+    AllowedValues:
+      - "True"
+      - "False"
+    Default:     "False"
+    Description: "Enable STARTTLS"
+
+  SuperUserEMAIL:
+    Type:        String
+    Description: "This is the email of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub™"
+
+  SuperUserFirstName:
+    Type:        String
+    Description: "This is the FirstName of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub™"
+
+  SuperUserLastName:
+    Type:        String
+    Description: "This is the LastName of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub™"
 
   ADSearchRoot:
-    Type:    String
-    Default: "cn=Users,dc=test,dc=com"
+    Type:        String
+    Description: "This is the node in the Active Directory Domain Services hierarchy where the search starts. For example 'DC=company,DC=com'"
+
+  ADServiceAccountUserDN:
+    Type:        String
+    Description: "APIX.Hub™ needs service account to connect to organization's active directory. This is the username for that service account. For example 'jsmith' or 'CN=JSmith,OU=Sales,DC=Fabrikam,DC=COM'"
+
+  ADServiceAccountPassword:
+    Type:        String
+    NoEcho:      True
+    Description: "APIX.Hub™ needs service account to connect to organization's active directory. This is the password for that service account. "
 
   InstanceType:
     Type:    String
     Default: t2.medium
 
-  KeyName:
-    Type:    AWS::EC2::KeyPair::KeyName
-    Default: AWS_Marketplace
+Mappings:
+  RegionMap:
+    us-east-1:
+      HVM64: ami-072f6aedb5718a798
 
 Resources:
   VPC:
@@ -146,7 +195,7 @@ Resources:
     Type: AWS::EC2::SecurityGroupIngress  # prevent security group circular references
     Properties:
       GroupId: !Ref               SecurityGroup2
-      IpProtocol:                 -1
+      IpProtocol:                 "-1"
       SourceSecurityGroupId: !Ref SecurityGroup2
 
   SSMRole:
@@ -176,11 +225,10 @@ Resources:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: !Ref       InstanceType
-      ImageId:                 "ami-00951cb8af4883f0a"
+      ImageId: !FindInMap [ RegionMap, !Ref "AWS::Region", HVM64 ]
       SubnetId: !Ref           PrivateSubnet1
       SecurityGroupIds:
         - !Ref SecurityGroup2
-      KeyName: !Ref            KeyName
       IamInstanceProfile: !Ref SSMInstanceProfile
       Tags:
         - Key:   Name
@@ -188,10 +236,16 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
                          #!/bin/bash -xe
-                         echo AD_SERVER_ADDRESS=${ADServerAddress} >> /home/ubuntu/apix-backend/.env
-                         echo AD_USE_SSL=${ADUseSSL} >> /home/ubuntu/apix-backend/.env
-                         echo AD_USE_STARTTLS=${ADUseSTARTTLS} >> /home/ubuntu/apix-backend/.env
-                         echo AD_SEARCH_ROOT=${ADSearchRoot} >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_SERVER_ADDRESS=${ADServerAddress}' >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_USE_SSL=${ADUseSSL}' >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_USE_STARTTLS=${ADUseSTARTTLS}' >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_SEARCH_ROOT=${ADSearchRoot}' >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_SERVICE_ACCOUNT_USER_DN=${ADServiceAccountUserDN}' >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_SERVICE_ACCOUNT_PASS=${ADServiceAccountPassword}' >> /home/ubuntu/apix-backend/.env
+                         echo 'BOOTSTRAP_USER_EMAIL=${SuperUserEMAIL}' >> /home/ubuntu/apix-backend/.env
+                         echo 'BOOTSTRAP_USER_FIRST_NAME=${SuperUserFirstName}' >> /home/ubuntu/apix-backend/.env
+                         echo 'BOOTSTRAP_USER_LAST_NAME=${SuperUserLastName}' >> /home/ubuntu/apix-backend/.env
+                         echo 'BOOTSTRAP_USER_ORG_NAME=Default' >> /home/ubuntu/apix-backend/.env
                          cd /home/ubuntu/apix-backend
                          docker-compose up --no-start
                          docker-compose start
@@ -264,7 +318,7 @@ Resources:
       VpcId: !Ref          VPC
 
       HealthCheckEnabled:  true
-      HealthCheckPort:     8000
+      HealthCheckPort:     "8000"
       HealthCheckProtocol: HTTP
       Tags:
         - Key:   "Name"
@@ -282,7 +336,7 @@ Resources:
       VpcId: !Ref          VPC
 
       HealthCheckEnabled:  true
-      HealthCheckPort:     8080
+      HealthCheckPort:     "8080"
       HealthCheckProtocol: HTTP
       Tags:
         - Key:   "Name"
@@ -296,7 +350,7 @@ Resources:
           - DomainName: !GetAtt 'LoadBalancer.DNSName'
             Id: !Ref            LoadBalancer
             CustomOriginConfig:
-              HTTPPort:             '80'
+              HTTPPort:             80
               OriginProtocolPolicy: "http-only"
         Enabled: true
         DefaultCacheBehavior:
@@ -311,6 +365,10 @@ Resources:
           TargetOriginId: !Ref  LoadBalancer
           ForwardedValues:
             QueryString: true
+            Headers:
+              - Accept-Encoding
+              - Accept-Language
+              - Authorization
             Cookies:
               Forward: all
           ViewerProtocolPolicy: redirect-to-https

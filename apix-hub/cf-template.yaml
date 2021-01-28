@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description:              APIX.Hub™ is an API document store for registering, discovering and accessing APIs, based on Open API standards (Swagger specification)
+Description:              APIX.Hub is an API document store for registering, discovering and accessing APIs, based on Open API standards (Swagger specification)
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -9,7 +9,6 @@ Metadata:
         Parameters:
           - ADServerAddress
           - ADUseSSL
-          - ADUseSTARTTLS
           - ADSearchRoot
           - ADServiceAccountUserDN
           - ADServiceAccountPassword
@@ -33,25 +32,17 @@ Parameters:
     Default:     "True"
     Description: "This setting allows for enabling SSL for the ldap connection to your server's organization. Default is true."
 
-  ADUseSTARTTLS:
-    Type:        String
-    AllowedValues:
-      - "True"
-      - "False"
-    Default:     "False"
-    Description: "Enable STARTTLS"
-
   SuperUserEMAIL:
     Type:        String
-    Description: "This is the email of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub™"
+    Description: "This is the email of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub"
 
   SuperUserFirstName:
     Type:        String
-    Description: "This is the FirstName of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub™"
+    Description: "This is the FirstName of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub"
 
   SuperUserLastName:
     Type:        String
-    Description: "This is the LastName of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub™"
+    Description: "This is the LastName of the user which already exists in your organization's AD. This user will be configured as administrator in APIX.Hub"
 
   ADSearchRoot:
     Type:        String
@@ -59,16 +50,191 @@ Parameters:
 
   ADServiceAccountUserDN:
     Type:        String
-    Description: "APIX.Hub™ needs service account to connect to organization's active directory. This is the username for that service account. For example 'jsmith' or 'CN=JSmith,OU=Sales,DC=Fabrikam,DC=COM'"
+    Description: "APIX.Hub needs service account to connect to organization's active directory. This is the username for that service account. For example 'jsmith' or 'CN=JSmith,OU=Sales,DC=Fabrikam,DC=COM'"
 
   ADServiceAccountPassword:
     Type:        String
     NoEcho:      True
-    Description: "APIX.Hub™ needs service account to connect to organization's active directory. This is the password for that service account. "
+    Description: "APIX.Hub needs service account to connect to organization's active directory. This is the password for that service account. "
 
   InstanceType:
     Type:    String
-    Default: t2.medium
+    AllowedValues:
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.12xlarge
+      - c5.18xlarge
+      - c5.24xlarge
+      - c5.metal
+      - c5a.large
+      - c5a.xlarge
+      - c5a.2xlarge
+      - c5a.4xlarge
+      - c5a.8xlarge
+      - c5a.12xlarge
+      - c5a.16xlarge
+      - c5a.24xlarge
+      - c5ad.large
+      - c5ad.xlarge
+      - c5ad.2xlarge
+      - c5ad.4xlarge
+      - c5ad.8xlarge
+      - c5ad.12xlarge
+      - c5ad.16xlarge
+      - c5ad.24xlarge
+      - c5d.large
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.9xlarge
+      - c5d.12xlarge
+      - c5d.18xlarge
+      - c5d.24xlarge
+      - c5d.metal
+      - c5n.large
+      - c5n.xlarge
+      - c5n.2xlarge
+      - c5n.4xlarge
+      - c5n.9xlarge
+      - c5n.18xlarge
+      - c5n.metal
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m4.16xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
+      - m5.12xlarge
+      - m5.16xlarge
+      - m5.24xlarge
+      - m5.metal
+      - m5a.large
+      - m5a.xlarge
+      - m5a.2xlarge
+      - m5a.4xlarge
+      - m5a.8xlarge
+      - m5a.12xlarge
+      - m5a.16xlarge
+      - m5a.24xlarge
+      - m5ad.large
+      - m5ad.xlarge
+      - m5ad.2xlarge
+      - m5ad.4xlarge
+      - m5ad.8xlarge
+      - m5ad.12xlarge
+      - m5ad.16xlarge
+      - m5ad.24xlarge
+      - m5d.large
+      - m5d.xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - m5d.8xlarge
+      - m5d.12xlarge
+      - m5d.16xlarge
+      - m5d.24xlarge
+      - m5d.metal
+      - m5dn.large
+      - m5dn.xlarge
+      - m5dn.2xlarge
+      - m5dn.4xlarge
+      - m5dn.8xlarge
+      - m5dn.12xlarge
+      - m5dn.16xlarge
+      - m5dn.24xlarge
+      - m5dn.metal
+      - m5n.large
+      - m5n.xlarge
+      - m5n.2xlarge
+      - m5n.4xlarge
+      - m5n.8xlarge
+      - m5n.12xlarge
+      - m5n.16xlarge
+      - m5n.24xlarge
+      - m5n.metal
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.8xlarge
+      - r5.12xlarge
+      - r5.16xlarge
+      - r5.24xlarge
+      - r5.metal
+      - r5a.large
+      - r5a.xlarge
+      - r5a.2xlarge
+      - r5a.4xlarge
+      - r5a.8xlarge
+      - r5a.12xlarge
+      - r5a.16xlarge
+      - r5a.24xlarge
+      - r5ad.large
+      - r5ad.xlarge
+      - r5ad.2xlarge
+      - r5ad.4xlarge
+      - r5ad.8xlarge
+      - r5ad.12xlarge
+      - r5ad.16xlarge
+      - r5ad.24xlarge
+      - r5d.large
+      - r5d.xlarge
+      - r5d.2xlarge
+      - r5d.4xlarge
+      - r5d.8xlarge
+      - r5d.12xlarge
+      - r5d.16xlarge
+      - r5d.24xlarge
+      - r5d.metal
+      - r5dn.large
+      - r5dn.xlarge
+      - r5dn.2xlarge
+      - r5dn.4xlarge
+      - r5dn.8xlarge
+      - r5dn.12xlarge
+      - r5dn.16xlarge
+      - r5dn.24xlarge
+      - r5dn.metal
+      - r5n.large
+      - r5n.xlarge
+      - r5n.2xlarge
+      - r5n.4xlarge
+      - r5n.8xlarge
+      - r5n.12xlarge
+      - r5n.16xlarge
+      - r5n.24xlarge
+      - r5n.metal
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t3a.2xlarge
+    Default: t3.medium
 
 Mappings:
   RegionMap:
@@ -238,7 +404,7 @@ Resources:
                          #!/bin/bash -xe
                          echo 'AD_SERVER_ADDRESS=${ADServerAddress}' >> /home/ubuntu/apix-backend/.env
                          echo 'AD_USE_SSL=${ADUseSSL}' >> /home/ubuntu/apix-backend/.env
-                         echo 'AD_USE_STARTTLS=${ADUseSTARTTLS}' >> /home/ubuntu/apix-backend/.env
+                         echo 'AD_USE_STARTTLS=True' >> /home/ubuntu/apix-backend/.env
                          echo 'AD_SEARCH_ROOT=${ADSearchRoot}' >> /home/ubuntu/apix-backend/.env
                          echo 'AD_SERVICE_ACCOUNT_USER_DN=${ADServiceAccountUserDN}' >> /home/ubuntu/apix-backend/.env
                          echo 'AD_SERVICE_ACCOUNT_PASS=${ADServiceAccountPassword}' >> /home/ubuntu/apix-backend/.env

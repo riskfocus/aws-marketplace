@@ -29,4 +29,3 @@ To log in use username/password combination for a user available in LDAP.
 To login as an administrator, please use username specified in parameters as SuperUserEMAIL. Password will be validated via LDAP.
 
 To connect to the EC2 use AWS Systems Manager.
-

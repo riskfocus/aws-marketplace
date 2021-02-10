@@ -18,6 +18,10 @@ Metadata:
           - SuperUserEMAIL
           - SuperUserFirstName
           - SuperUserLastName
+      - Label:
+          default: "SecurityGroup Configuration"
+        Parameters:
+          - "LoadBalancerCIDR"
 
 Parameters:
   ADServerAddress:
@@ -56,6 +60,12 @@ Parameters:
     Type:        String
     NoEcho:      True
     Description: "APIX.Hub needs service account to connect to organization's active directory. This is the password for that service account. "
+
+  LoadBalancerCIDR:
+    Type:        String
+    NoEcho:      True
+    Default:     0.0.0.0/0
+    Description: "This makes ELB open to everyone and used for CloudFront integration. This setup relies on the default value to work, but you can customize it if you plan to access ELB directly from specific IP range."
 
   InstanceType:
     Type:    String
@@ -344,11 +354,14 @@ Resources:
       GroupDescription: "Security group with LB ingress rule"
       VpcId: !Ref       VPC
       SecurityGroupIngress:
-        - CidrIp:      0.0.0.0/0
-          IpProtocol:  tcp
-          ToPort:      80
-          FromPort:    80
+        - CidrIp: !Ref LoadBalancerCIDR
+          IpProtocol:   tcp
+          ToPort:       80
+          FromPort:     80
           Description: "LB ingress rule"
+      SecurityGroupEgress:
+        - CidrIp:       0.0.0.0/0
+          IpProtocol:   "-1"
 
   SecurityGroup2:
     Type: AWS::EC2::SecurityGroup
@@ -356,9 +369,12 @@ Resources:
       GroupName:        "intermediate-sg"
       GroupDescription: "Security group for LB and EC2 connection"
       VpcId: !Ref       VPC
+      SecurityGroupEgress:
+        - CidrIp:       0.0.0.0/0
+          IpProtocol:   "-1"
 
   SecurityGroup2Ingress:
-    Type: AWS::EC2::SecurityGroupIngress  # prevent security group circular references
+    Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !Ref               SecurityGroup2
       IpProtocol:                 "-1"
@@ -401,23 +417,23 @@ Resources:
           Value: 'APIX-HUB'
       UserData:
         Fn::Base64: !Sub |
-                         #!/bin/bash -xe
-                         echo 'AD_SERVER_ADDRESS=${ADServerAddress}' >> /home/ubuntu/apix-backend/.env
-                         echo 'AD_USE_SSL=${ADUseSSL}' >> /home/ubuntu/apix-backend/.env
-                         echo 'AD_USE_STARTTLS=True' >> /home/ubuntu/apix-backend/.env
-                         echo 'AD_SEARCH_ROOT=${ADSearchRoot}' >> /home/ubuntu/apix-backend/.env
-                         echo 'AD_SERVICE_ACCOUNT_USER_DN=${ADServiceAccountUserDN}' >> /home/ubuntu/apix-backend/.env
-                         echo 'AD_SERVICE_ACCOUNT_PASS=${ADServiceAccountPassword}' >> /home/ubuntu/apix-backend/.env
-                         echo 'BOOTSTRAP_USER_EMAIL=${SuperUserEMAIL}' >> /home/ubuntu/apix-backend/.env
-                         echo 'BOOTSTRAP_USER_FIRST_NAME=${SuperUserFirstName}' >> /home/ubuntu/apix-backend/.env
-                         echo 'BOOTSTRAP_USER_LAST_NAME=${SuperUserLastName}' >> /home/ubuntu/apix-backend/.env
-                         echo 'BOOTSTRAP_USER_ORG_NAME=Default' >> /home/ubuntu/apix-backend/.env
-                         cd /home/ubuntu/apix-backend
-                         docker-compose up --no-start
-                         docker-compose start
-                         cd /home/ubuntu/apix-ui
-                         docker-compose up --no-start
-                         docker-compose start
+          #!/bin/bash -xe
+          echo 'AD_SERVER_ADDRESS=${ADServerAddress}' >> /home/ubuntu/apix-backend/.env
+          echo 'AD_USE_SSL=${ADUseSSL}' >> /home/ubuntu/apix-backend/.env
+          echo 'AD_USE_STARTTLS=True' >> /home/ubuntu/apix-backend/.env
+          echo 'AD_SEARCH_ROOT=${ADSearchRoot}' >> /home/ubuntu/apix-backend/.env
+          echo 'AD_SERVICE_ACCOUNT_USER_DN=${ADServiceAccountUserDN}' >> /home/ubuntu/apix-backend/.env
+          echo 'AD_SERVICE_ACCOUNT_PASS=${ADServiceAccountPassword}' >> /home/ubuntu/apix-backend/.env
+          echo 'BOOTSTRAP_USER_EMAIL=${SuperUserEMAIL}' >> /home/ubuntu/apix-backend/.env
+          echo 'BOOTSTRAP_USER_FIRST_NAME=${SuperUserFirstName}' >> /home/ubuntu/apix-backend/.env
+          echo 'BOOTSTRAP_USER_LAST_NAME=${SuperUserLastName}' >> /home/ubuntu/apix-backend/.env
+          echo 'BOOTSTRAP_USER_ORG_NAME=Default' >> /home/ubuntu/apix-backend/.env
+          cd /home/ubuntu/apix-backend
+          docker-compose up --no-start
+          docker-compose start
+          cd /home/ubuntu/apix-ui
+          docker-compose up --no-start
+          docker-compose start
 
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -545,3 +561,7 @@ Outputs:
   APIXHubHost:
     Description:   Endpoint for Cloudfront Distribution
     Value: !GetAtt CloudFrontDistribution.DomainName
+
+  APIXHubLoadBalancer:
+    Description:   Endpoint for LoadBalancer
+    Value: !GetAtt LoadBalancer.DNSName

@@ -21,7 +21,7 @@ Metadata:
       - Label:
           default: "SecurityGroup Configuration"
         Parameters:
-          - "LoadBalancerCIDR"
+          - LoadBalancerCIDR
 
 Parameters:
   ADServerAddress:
@@ -63,7 +63,6 @@ Parameters:
 
   LoadBalancerCIDR:
     Type:        String
-    NoEcho:      True
     Default:     0.0.0.0/0
     Description: "This makes ELB open to everyone and used for CloudFront integration. This setup relies on the default value to work, but you can customize it if you plan to access ELB directly from specific IP range."
 
@@ -249,7 +248,7 @@ Parameters:
 Mappings:
   RegionMap:
     us-east-1:
-      HVM64: ami-072f6aedb5718a798
+      HVM64: ami-0e2ff26a1ad79d7e8
 
 Resources:
   VPC:
